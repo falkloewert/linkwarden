@@ -314,8 +314,8 @@ jobs:
             });
             const changedPaths = [...new Set(prFiles.flatMap((f) => [f.filename, f.previous_filename].filter(Boolean)))];
             // Rendered from factory/evidence.config.sh by install.sh (this job never checks out PR code).
-            const verificationRe = new RegExp("(^|[\\/._-])(tests?|__tests__|specs?|mocks?|evidence)([\\/._-]|$)|docker-compose|run-evidence\\.sh", 'i');
-            const sensitiveRe = new RegExp("(^|[\\/._-])(auth|security|migrations?|billing|payments?)([\\/._-]|$)|Dockerfile|\\.github\\/workflows\\/|\\.env|secret|evidence\\.config\\.sh", 'i');
+            const verificationRe = new RegExp("(^|[\\/._-])(tests?|__tests__|specs?|mocks?|e2e|evidence)([\\/._-]|$)|docker-compose|run-evidence\\.sh|smoke\\.sh", 'i');
+            const sensitiveRe = new RegExp("(^|[\\/._-])(auth|security|migrations?|billing|payments?|stripe)([\\/._-]|$)|(^|\\/)Dockerfile|(^|\\/)(docker-)?compose[^\\/]*\\.ya?ml$|\\.github\\/|^factory\\/|\\.env|secret|schema\\.prisma", 'i');
 
             const touchedVerification = changedPaths.filter((p) => verificationRe.test(p)).sort();
             const touchedSensitive = changedPaths.filter((p) => sensitiveRe.test(p)).sort();
