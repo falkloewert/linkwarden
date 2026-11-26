@@ -23,7 +23,7 @@ UNIT_SERVICE=unit
 UNIT_LABEL="Unit & integration tests (vitest, 2 upstream skips excluded)"
 # ponytail: the quality gate fails on any skipped test, also on the 2 tests upstream skips on purpose.
 # Exactly these two names are dropped from the TAP (a new skip still fails the gate); remove the
-# filter once the kit can list known upstream skips (glass-factory issue, see AGENTS.md).
+# filter once the kit can list known upstream skips (falkloewert/glass-factory#14).
 UNIT_CMD='yarn vitest run --reporter=tap-flat apps/web/lib/api 2>&1 | grep -v -e "two opposite moves arrive together # SKIP" -e "adds undated links as of the import, after past dates and before future ones # SKIP"'
 SMOKE_CMD="factory/smoke.sh"
 

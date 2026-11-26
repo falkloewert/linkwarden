@@ -15,9 +15,11 @@ import { fileURLToPath } from "node:url";
 // Vitest's and Playwright's default test file names
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
 
-// Minus what vitest.config.mts excludes
+// Minus what vitest.config.mts excludes (factory/: Playwright specs of the factory sandbox)
 const isVitestTest = (path) =>
-  TEST_FILE.test(path) && !/(^|\/)(node_modules|dist|e2e|\.next)\//.test(path);
+  TEST_FILE.test(path) &&
+  !/(^|\/)(node_modules|dist|e2e|\.next)\//.test(path) &&
+  !path.startsWith("factory/");
 
 // Each area lists the files or folders (ending in "/") it runs, relative to
 // the suite's dir.
