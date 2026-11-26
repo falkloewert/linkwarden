@@ -235,19 +235,27 @@ export default async function updateUserById(
     data: {
       name: data.name,
       username: data.username,
+      // Fields a settings section does not send stay as they are
       image:
-        data.image && data.image.startsWith("http")
-          ? data.image
-          : data.image
-            ? `uploads/avatar/${userId}.jpg`
-            : "",
+        data.image === undefined
+          ? undefined
+          : data.image && data.image.startsWith("http")
+            ? data.image
+            : data.image
+              ? `uploads/avatar/${userId}.jpg`
+              : "",
       collectionOrder: data.collectionOrder?.filter(
         (value, index, self) => self.indexOf(value) === index
       ),
       aiTaggingMethod: data.aiTaggingMethod,
       aiPredefinedTags: data.aiPredefinedTags,
       aiTagExistingLinks: data.aiTagExistingLinks,
-      locale: i18n.locales.includes(data.locale || "") ? data.locale : "en",
+      locale:
+        data.locale === undefined
+          ? undefined
+          : i18n.locales.includes(data.locale)
+            ? data.locale
+            : "en",
       archiveAsScreenshot: data.archiveAsScreenshot,
       archiveAsMonolith: data.archiveAsMonolith,
       archiveAsPDF: data.archiveAsPDF,
