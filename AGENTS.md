@@ -146,8 +146,9 @@ Local, offline sandbox for agents and CI: `docker-compose.factory.yml` (project 
 | `mock` | Mock Ollama (`factory/mocks/ollama/`, AI tagging provider) and the sandbox reset | `FACTORY_MOCK_PORT` (13434) |
 | `web` | The upstream `Dockerfile` unchanged: migrations, then web + worker | `FACTORY_WEB_PORT` (13000) |
 | `unit` | `factory/unit/Dockerfile`: all dependencies, idling for vitest | none |
+| `meili-test` | Throwaway Meilisearch for the search integration tests (they wipe it) | none |
 
-Not in the sandbox: Meilisearch (search falls back to the database), S3, SMTP, OIDC, Stripe, real AI providers, the internet. Browser tests block every request that leaves the sandbox.
+Not in the sandbox: Meilisearch for the app (search falls back to the database), S3, SMTP, OIDC, Stripe, real AI providers, the internet. Browser tests block every request that leaves the sandbox.
 
 - Start: `docker compose -f docker-compose.factory.yml up -d --build --wait`
 - Seed and smoke: `factory/smoke.sh` (resets to the seed first)

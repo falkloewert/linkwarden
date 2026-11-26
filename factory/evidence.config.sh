@@ -16,8 +16,8 @@ RESET_REQUESTS="POST $MOCK_URL/_mock/reset"
 # Served as {} = no announcement, so no banner covers the video.
 ROUTED_FIXTURES="https://linkwarden.app/blog/latest-announcement.json => /fixtures/latest-announcement.json"
 
-# vitest in the "unit" service (build stage with dev dependencies, sandbox database for the
-# *.integration.test.ts files).
+# vitest in the "unit" service (factory/unit/Dockerfile, sandbox database and the throwaway
+# Meilisearch for the *.integration.test.ts files).
 UNIT_RUNNER=service
 UNIT_SERVICE=unit
 UNIT_LABEL="Unit & integration tests (vitest, 2 upstream skips excluded)"

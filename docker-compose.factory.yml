@@ -1,6 +1,6 @@
-# Factory sandbox: Linkwarden (web + worker, built from this checkout), PostgreSQL and a mock
-# Ollama. No Meilisearch, no S3, no SMTP, no real AI provider, no secrets. See AGENTS.md,
-# "Factory sandbox".
+# Factory sandbox: Linkwarden (web + worker, built from this checkout), PostgreSQL, a mock Ollama
+# and a throwaway Meilisearch for the search tests. No S3, no SMTP, no real AI provider, no
+# secrets. See AGENTS.md, "Factory sandbox".
 #
 #   docker compose -f docker-compose.factory.yml up -d --build --wait
 #   factory/smoke.sh
@@ -81,6 +81,21 @@ services:
       retries: 60
     networks: [sandbox]
 
+  # Throwaway Meilisearch for the search integration tests only (they wipe it). The app itself
+  # runs without Meilisearch and searches the database.
+  meili-test:
+    image: getmeili/meilisearch:v1.13.3
+    environment:
+      MEILI_MASTER_KEY: local_dev_only_meili_key
+      MEILI_NO_ANALYTICS: "true"
+      MEILI_ENV: development
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:7700/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    networks: [sandbox]
+
   # Unit and integration tests (vitest): the upstream images have no dev dependencies, so
   # factory/unit/Dockerfile installs them. Idles until run-evidence.sh execs the tests.
   unit:
@@ -90,8 +105,12 @@ services:
     environment:
       DATABASE_URL: *db-url
       NEXTAUTH_SECRET: local_dev_only_not_a_secret
+      MEILI_TEST_HOST: http://meili-test:7700
+      MEILI_TEST_KEY: local_dev_only_meili_key
     depends_on:
       db:
+        condition: service_healthy
+      meili-test:
         condition: service_healthy
     networks: [sandbox]
 
