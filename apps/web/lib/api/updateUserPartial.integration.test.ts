@@ -76,6 +76,7 @@ describe("saving one settings section, with a real database", () => {
 
     expect(result.status).toBe(200);
     expect((result.response as any).locale).toBe("de");
+    expect((result.response as any).image).toMatch(/^uploads\/avatar\/1\.jpg\?/);
     const after = await stored(user.id);
     expect(after.aiTaggingMethod).toBe("GENERATE");
     expect(after.locale).toBe("de");

@@ -44,11 +44,15 @@ test('Level 1 focused proof (#1915): saving AI tagging keeps the language German
   await session.beginStep(2, TOTAL_STEPS, 'Change AI tagging and save');
   await highlightAndClick(page, page.locator('label').filter({ hasText: 'Tags automatisch generieren' }));
   await expect(generate).toBeChecked();
-  await highlightAndClick(page, page.getByRole('button', { name: 'Änderungen speichern' }).first());
+  const save = page.getByRole('button', { name: 'Änderungen speichern' }).first();
+  await highlightAndClick(page, save);
   await expect(page.getByText('Einstellungen übernommen!')).toBeVisible();
+  // Nothing left to save in this section once the server took it
+  await expect(save).toBeDisabled();
+  await highlightLocator(page, page.locator('label').filter({ hasText: 'Tags automatisch generieren' }));
   await session.finishStep({
     screenshotFile: '02-ai-tagging-saved.png',
-    assertion: 'AI tagging set to "Tags automatisch generieren", saved with "Änderungen speichern": toast "Einstellungen übernommen!" (still German)',
+    assertion: 'AI tagging set to "Tags automatisch generieren" and saved: the test saw the toast "Einstellungen übernommen!", the section\'s save button is disabled again, the page is still German',
   });
 
   // Step 3/4: reload, the page is still German and the server kept both values
