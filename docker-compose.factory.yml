@@ -107,8 +107,9 @@ services:
       NEXTAUTH_SECRET: local_dev_only_not_a_secret
       MEILI_TEST_HOST: http://meili-test:7700
       MEILI_TEST_KEY: local_dev_only_meili_key
+    # The migrations run in web on start; healthy web means a migrated database.
     depends_on:
-      db:
+      web:
         condition: service_healthy
       meili-test:
         condition: service_healthy
