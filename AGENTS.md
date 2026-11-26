@@ -145,7 +145,7 @@ Local, offline sandbox for agents and CI: `docker-compose.factory.yml` (project 
 | `db` | PostgreSQL 16, database `linkwarden_factory` | none |
 | `mock` | Mock Ollama (`factory/mocks/ollama/`, AI tagging provider) and the sandbox reset | `FACTORY_MOCK_PORT` (13434) |
 | `web` | The upstream `Dockerfile` unchanged: migrations, then web + worker | `FACTORY_WEB_PORT` (13000) |
-| `unit` | Build stage `app-builder` (dev dependencies) idling for vitest | none |
+| `unit` | `factory/unit/Dockerfile`: all dependencies, idling for vitest | none |
 
 Not in the sandbox: Meilisearch (search falls back to the database), S3, SMTP, OIDC, Stripe, real AI providers, the internet. Browser tests block every request that leaves the sandbox.
 

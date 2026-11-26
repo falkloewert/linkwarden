@@ -81,13 +81,12 @@ services:
       retries: 60
     networks: [sandbox]
 
-  # Unit and integration tests (vitest): the build stage of the upstream Dockerfile still has the
-  # dev dependencies, the runtime image does not. Idles until run-evidence.sh execs the tests.
+  # Unit and integration tests (vitest): the upstream images have no dev dependencies, so
+  # factory/unit/Dockerfile installs them. Idles until run-evidence.sh execs the tests.
   unit:
     build:
       context: .
-      target: app-builder
-    command: ["sleep", "infinity"]
+      dockerfile: factory/unit/Dockerfile
     environment:
       DATABASE_URL: *db-url
       NEXTAUTH_SECRET: local_dev_only_not_a_secret
