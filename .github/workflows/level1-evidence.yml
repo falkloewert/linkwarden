@@ -34,7 +34,7 @@ name: Level 1 Evidence Check
 on:
   pull_request:
     # ponytail: "dev" added by hand (linkwarden takes PRs on dev); the kit template hard-codes main and
-    # install.sh --update reverts this. Remove once the kit renders the base branches from the config.
+    # install.sh --update reverts this. Remove once the kit renders the base branches (falkloewert/glass-factory#13).
     branches: [main, dev]
 
 permissions: {}
