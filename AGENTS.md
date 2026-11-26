@@ -135,3 +135,26 @@ The browser extension lives in this monorepo (`apps/extension`); the older stand
 - Server-side data access belongs in a controller under `apps/web/lib/api/controllers/`, client-side data access in a `packages/router` hook. Logic needed by both web and mobile belongs in `packages/lib` or `packages/router`, not in `apps/web`.
 - UI is Tailwind plus DaisyUI with some Radix primitives on web, NativeWind on mobile. Prefer existing components in `apps/web/components/` over new one-off ones.
 - Styling and copy: plain, direct tone. When something is blocked by a site (paywalls, bot protection), describe it as that site's restriction.
+
+## Factory sandbox (glass-factory Level 0 + Level 1)
+
+Local, offline sandbox for agents and CI: `docker-compose.factory.yml` (project name `linkwarden-factory`, never the folder name). No secrets: every credential in it is a dummy.
+
+| Service | What | Host port (loopback) |
+| --- | --- | --- |
+| `db` | PostgreSQL 16, database `linkwarden_factory` | none |
+| `mock` | Mock Ollama (`factory/mocks/ollama/`, AI tagging provider) and the sandbox reset | `FACTORY_MOCK_PORT` (13434) |
+| `web` | The upstream `Dockerfile` unchanged: migrations, then web + worker | `FACTORY_WEB_PORT` (13000) |
+| `unit` | Build stage `app-builder` (dev dependencies) idling for vitest | none |
+
+Not in the sandbox: Meilisearch (search falls back to the database), S3, SMTP, OIDC, Stripe, real AI providers, the internet. Browser tests block every request that leaves the sandbox.
+
+- Start: `docker compose -f docker-compose.factory.yml up -d --build --wait`
+- Seed and smoke: `factory/smoke.sh` (resets to the seed first)
+- Unit and integration tests: `docker compose -f docker-compose.factory.yml exec -T unit yarn vitest run apps/web/lib/api`
+- Evidence run (unit, smoke, Playwright proof video, quality gate): `factory/evidence/run-evidence.sh`
+- Teardown: `docker compose -f docker-compose.factory.yml down -v`
+
+Seed (`factory/mocks/ollama/seed.sql`, applied by `POST /_mock/reset` before every browser test): one user `tester` / `factory-local-only`, language German, AI tagging off. The reset refuses any database but `db/linkwarden_factory`.
+
+Mock Ollama failure triggers (text of the last user message sent to `POST /api/chat`): `factory-fail-once` answers 500 once, then normally; `factory-bad-json` answers prose instead of a JSON tag list; `factory-timeout` never answers. `GET /_mock/events` lists what the app sent, `GET /` shows it as a page.

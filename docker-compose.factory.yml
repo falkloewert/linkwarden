@@ -1,0 +1,120 @@
+# Factory sandbox: Linkwarden (web + worker, built from this checkout), PostgreSQL and a mock
+# Ollama. No Meilisearch, no S3, no SMTP, no real AI provider, no secrets. See AGENTS.md,
+# "Factory sandbox".
+#
+#   docker compose -f docker-compose.factory.yml up -d --build --wait
+#   factory/smoke.sh
+#   docker compose -f docker-compose.factory.yml down -v
+#
+# Evidence run (unit tests, smoke, Playwright proof video, quality gate; config in factory/evidence.config.sh):
+#   factory/evidence/run-evidence.sh
+#
+# Parallel runs: set COMPOSE_PROJECT_NAME and FACTORY_WEB_PORT / FACTORY_MOCK_PORT.
+
+# Own project name: without it Compose uses the folder name (linkwarden), the usual name of a
+# real install, and "up"/"down -v" would replace or remove its containers and volumes.
+name: linkwarden-factory
+
+x-db-url: &db-url postgresql://linkwarden:local_dev_only@db:5432/linkwarden_factory
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: linkwarden
+      POSTGRES_PASSWORD: local_dev_only
+      POSTGRES_DB: linkwarden_factory
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "linkwarden", "-d", "linkwarden_factory"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    networks: [sandbox]
+
+  # Mock Ollama (AI tagging provider) and the sandbox reset (POST /_mock/reset: seed.sql).
+  mock:
+    build: ./factory/mocks/ollama
+    environment:
+      OLLAMA_MODEL: factory-mock
+      FACTORY_DATABASE_URL: *db-url
+    volumes:
+      - ./factory/mocks/ollama:/mock:ro
+    ports:
+      - "127.0.0.1:${FACTORY_MOCK_PORT:-13434}:11434"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:11434/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+    networks: [sandbox]
+
+  # The upstream Dockerfile unchanged: runs "prisma migrate deploy", then web and worker.
+  web:
+    build: .
+    environment:
+      DATABASE_URL: *db-url
+      NEXTAUTH_URL: http://web:3000/api/v1/auth
+      NEXTAUTH_SECRET: local_dev_only_not_a_secret
+      NEXT_PUBLIC_OLLAMA_ENDPOINT_URL: http://mock:11434
+      OLLAMA_MODEL: factory-mock
+      # Sandbox only: the mock and the db are private addresses.
+      ALLOW_PRIVATE_NETWORK_ACCESS: "true"
+      STORAGE_FOLDER: data
+    volumes:
+      - appdata:/data/data
+    ports:
+      - "127.0.0.1:${FACTORY_WEB_PORT:-13000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      mock:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "-o", "/dev/null", "http://127.0.0.1:3000/api/v1/config"]
+      interval: 3s
+      timeout: 3s
+      retries: 60
+    networks: [sandbox]
+
+  # Unit and integration tests (vitest): the build stage of the upstream Dockerfile still has the
+  # dev dependencies, the runtime image does not. Idles until run-evidence.sh execs the tests.
+  unit:
+    build:
+      context: .
+      target: app-builder
+    command: ["sleep", "infinity"]
+    environment:
+      DATABASE_URL: *db-url
+      NEXTAUTH_SECRET: local_dev_only_not_a_secret
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [sandbox]
+
+  # Playwright browser tests (profile "evidence", started by factory/evidence/run-evidence.sh).
+  # The browser reaches http://web:3000 (Linkwarden) and http://mock:11434 (mock inspector).
+  evidence:
+    profiles: ["evidence"]
+    build:
+      context: ./factory/evidence
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    depends_on:
+      web:
+        condition: service_healthy
+      mock:
+        condition: service_healthy
+    volumes:
+      - ${ARTIFACTS_DIR:-./factory/artifacts}:/artifacts
+    networks: [sandbox]
+
+volumes:
+  pgdata:
+  appdata:
+
+networks:
+  sandbox:

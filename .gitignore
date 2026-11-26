@@ -57,3 +57,5 @@ prisma/dev.db
 .turbo
 
 service-account-file.json
+# Factory sandbox evidence artifacts
+factory/artifacts/
