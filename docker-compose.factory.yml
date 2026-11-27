@@ -33,19 +33,17 @@ services:
       retries: 30
     networks: [sandbox]
 
-  # Mock Ollama (AI tagging provider) and the sandbox reset (POST /_mock/reset: seed.sql).
+  # Mock Ollama (AI tagging provider).
   mock:
-    build: ./factory/mocks/ollama
+    image: node:24.11.1-alpine
+    command: ["node", "/mock/server.mjs"]
+    user: node
     environment:
       OLLAMA_MODEL: factory-mock
-      FACTORY_DATABASE_URL: *db-url
     volumes:
       - ./factory/mocks/ollama:/mock:ro
     ports:
       - "127.0.0.1:${FACTORY_MOCK_PORT:-13434}:11434"
-    depends_on:
-      db:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:11434/health"]
       interval: 2s
@@ -79,6 +77,24 @@ services:
       interval: 3s
       timeout: 3s
       retries: 60
+    networks: [sandbox]
+
+  # Back to the seed before every browser test: the kit's seed-reset runs factory/seed.sql
+  # (refuses any database but a *_factory one on a compose host).
+  seed-reset:
+    build: ./factory/evidence/seed-reset
+    environment:
+      DATABASE_URL: *db-url
+    volumes:
+      - ./factory/seed.sql:/seed/seed.sql:ro
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8090/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
     networks: [sandbox]
 
   # Throwaway Meilisearch for the search integration tests only (they wipe it). The app itself
@@ -126,6 +142,8 @@ services:
       web:
         condition: service_healthy
       mock:
+        condition: service_healthy
+      seed-reset:
         condition: service_healthy
     volumes:
       - ${ARTIFACTS_DIR:-./factory/artifacts}:/artifacts

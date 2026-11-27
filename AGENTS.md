@@ -143,7 +143,8 @@ Local, offline sandbox for agents and CI: `docker-compose.factory.yml` (project 
 | Service | What | Host port (loopback) |
 | --- | --- | --- |
 | `db` | PostgreSQL 16, database `linkwarden_factory` | none |
-| `mock` | Mock Ollama (`factory/mocks/ollama/`, AI tagging provider) and the sandbox reset | `FACTORY_MOCK_PORT` (13434) |
+| `mock` | Mock Ollama (`factory/mocks/ollama/`, AI tagging provider) | `FACTORY_MOCK_PORT` (13434) |
+| `seed-reset` | Kit service: `POST /reset` runs `factory/seed.sql` (only on a `*_factory` database) | none |
 | `web` | The upstream `Dockerfile` unchanged: migrations, then web + worker | `FACTORY_WEB_PORT` (13000) |
 | `unit` | `factory/unit/Dockerfile`: all dependencies, idling for vitest | none |
 | `meili-test` | Throwaway Meilisearch for the search integration tests (they wipe it) | none |
@@ -156,6 +157,6 @@ Not in the sandbox: Meilisearch for the app (search falls back to the database),
 - Evidence run (unit, smoke, Playwright proof video, quality gate): `factory/evidence/run-evidence.sh`
 - Teardown: `docker compose -f docker-compose.factory.yml down -v`
 
-Seed (`factory/mocks/ollama/seed.sql`, applied by `POST /_mock/reset` before every browser test): one user `tester` / `factory-local-only`, language German, AI tagging off. The reset refuses any database but `db/linkwarden_factory`.
+Seed (`factory/seed.sql`, applied by the `seed-reset` service before every browser test): one user `tester` / `factory-local-only`, language German, AI tagging off. The reset refuses any database that is not a `*_factory` database on a compose host.
 
 Mock Ollama failure triggers (text of the last user message sent to `POST /api/chat`): `factory-fail-once` answers 500 once, then normally; `factory-bad-json` answers prose instead of a JSON tag list; `factory-timeout` never answers. `GET /_mock/events` lists what the app sent, `GET /` shows it as a page.

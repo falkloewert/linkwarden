@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# managed by glass-factory kit v1.3.0 (a5ab14a), do not edit; change factory/evidence.config.sh or factory/evidence/tests/
+# managed by glass-factory kit v1.4.0 (38d025b), do not edit; change factory/evidence.config.sh or factory/evidence/tests/
 # Shared by run-evidence.sh and install.sh (and the kit self-test): loads factory/evidence.config.sh
 # on top of the kit defaults. Source it, do not execute it.
 

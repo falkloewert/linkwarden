@@ -7,7 +7,8 @@ set -euo pipefail
 WEB="http://127.0.0.1:${FACTORY_WEB_PORT:-13000}"
 MOCK="http://127.0.0.1:${FACTORY_MOCK_PORT:-13434}"
 
-curl -sf -X POST "$MOCK/_mock/reset" >/dev/null
+# seed-reset has no host port: reset from inside the sandbox (COMPOSE_PROJECT_NAME of the run).
+docker compose -f docker-compose.factory.yml exec -T seed-reset wget -q -O /dev/null --post-data= http://127.0.0.1:8090/reset
 curl -sf "$WEB/api/v1/config" | grep -q '"AI_ENABLED":true'
 
 token=$(curl -sf -H 'content-type: application/json' \

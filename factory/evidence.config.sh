@@ -10,9 +10,8 @@ BASE_BRANCHES=dev
 APP_PORT_VAR=FACTORY_WEB_PORT
 MOCK_PORT_VAR=FACTORY_MOCK_PORT
 
-# The mock forgets its events and resets the sandbox database to factory/mocks/ollama/seed.sql
-# (refuses any database but db/linkwarden_factory).
-RESET_REQUESTS="POST $MOCK_URL/_mock/reset"
+# Database back to factory/seed.sql (kit seed-reset), mock events cleared.
+RESET_REQUESTS="POST http://seed-reset:8090/reset; POST $MOCK_URL/_mock/reset"
 # Every page of the app loads the announcement banner from linkwarden.app in the browser
 # (apps/web/lib/client/getLatestAnnouncement.ts; real answer 2026-11-26: {"id": "2.17"}).
 # Served as {} = no announcement, so no banner covers the video.

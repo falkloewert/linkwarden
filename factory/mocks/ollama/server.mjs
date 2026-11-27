@@ -1,12 +1,11 @@
-// Mock Ollama for the factory sandbox, plus the sandbox reset (database back to the seed).
-// No dependencies. Contract: samples/ (from the Ollama API docs, POST /api/chat with stream=false,
+// Mock Ollama for the factory sandbox. No dependencies. Contract: samples/ (from the Ollama API docs, POST /api/chat with stream=false,
 // which is what ollama-ai-provider-v2 sends for generateText in apps/worker/lib/autoTagLink.ts).
 //
 //   GET  /health          200 when up
 //   GET  /api/tags        the one fake model
 //   POST /api/chat        fixed tag answer (failure triggers below), recorded
 //   GET  /_mock/events    what the app sent, JSON
-//   POST /_mock/reset     forget events, reset the sandbox database to factory/mocks/ollama/seed.sql
+//   POST /_mock/reset     forget events (the database is reset by the kit's seed-reset service)
 //   GET  /                inspector page (events as a table)
 //
 // Failure triggers (the last user message decides):
@@ -14,12 +13,9 @@
 //   contains "factory-bad-json"   answer that is not a JSON array of tags
 //   contains "factory-timeout"    no answer for 120 s
 import http from 'node:http';
-import { execFile } from 'node:child_process';
 
 const PORT = 11434;
 const MODEL = process.env.OLLAMA_MODEL || 'factory-mock';
-const DATABASE_URL = process.env.FACTORY_DATABASE_URL || '';
-const SEED_FILE = '/mock/seed.sql';
 
 let events = [];
 const failedOnce = new Set();
@@ -40,24 +36,6 @@ function readBody(req) {
         resolve(raw);
       }
     });
-  });
-}
-
-// Only the sandbox database: host "db", database "linkwarden_factory". seed.sql checks the name again.
-function resetDatabase() {
-  return new Promise((resolve, reject) => {
-    let url;
-    try {
-      url = new URL(DATABASE_URL);
-    } catch {
-      return reject(new Error('FACTORY_DATABASE_URL is not set'));
-    }
-    if (url.hostname !== 'db' || url.pathname !== '/linkwarden_factory') {
-      return reject(new Error(`refusing to reset ${url.hostname}${url.pathname}`));
-    }
-    execFile('psql', [DATABASE_URL, '-v', 'ON_ERROR_STOP=1', '-q', '-f', SEED_FILE], (err, _out, stderr) =>
-      err ? reject(new Error(stderr || err.message)) : resolve()
-    );
   });
 }
 
@@ -120,12 +98,7 @@ http
     if (req.method === 'POST' && pathname === '/_mock/reset') {
       events = [];
       failedOnce.clear();
-      try {
-        await resetDatabase();
-        return send(res, 200, { reset: true });
-      } catch (err) {
-        return send(res, 500, { error: err.message });
-      }
+      return send(res, 200, { reset: true });
     }
     if (req.method === 'GET' && pathname === '/') return send(res, 200, inspectorPage(), 'text/html; charset=utf-8');
 

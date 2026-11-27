@@ -16,7 +16,7 @@ It refuses to run if the managed paths have uncommitted changes, and prints what
 
 | Path in the project | Owner | Installer |
 |---|---|---|
-| `factory/evidence/` (Dockerfile, scripts, `run-evidence.sh`, `lib.sh`, this README, `VERSION`) | kit | overwritten on `--update` (header: managed, do not edit) |
+| `factory/evidence/` (Dockerfile, scripts, `run-evidence.sh`, `lib.sh`, `seed-reset/`, this README, `VERSION`) | kit | overwritten on `--update` (header: managed, do not edit) |
 | `.github/workflows/level1-evidence.yml` | kit, rendered from the config | overwritten on `--update` |
 | `factory/evidence/tests/*.spec.mjs` | project | never touched |
 | `factory/evidence.config.sh` | project | commented template only if missing |
@@ -40,6 +40,35 @@ The auto fixture resets the project state before each test, routes fixtures, and
 leaves the sandbox. The quality gate (`specs_use_sandbox_fixture`) fails if any spec imports `@playwright/test` (or `playwright`) directly.
 Unit test runners of the project collect `*.spec.mjs` by default: exclude the factory folder from them (vitest
 `test.exclude`, jest `testPathIgnorePatterns`, CI scripts that list test files); `install.sh` points out the configs it finds. Quality gate and report formats: see the skill `level1-evidence`.
+
+## Database reset (`seed-reset`, PostgreSQL)
+
+Every test starts from the seed (`RESET_REQUESTS`). An app with a database but without a test reset
+endpoint gets the kit's seed-reset service instead of a change to its code:
+
+```yaml
+  seed-reset:
+    build: ./factory/evidence/seed-reset
+    environment:
+      DATABASE_URL: postgresql://app:local_dev_only@db:5432/app_factory
+    volumes:
+      - ./factory/seed.sql:/seed/seed.sql:ro
+    depends_on:
+      web: { condition: service_healthy }   # the app ran its migrations
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8090/health"]
+    networks: [sandbox]
+```
+
+`RESET_REQUESTS="POST http://seed-reset:8090/reset; POST $MOCK_URL/_mock/reset"`. `POST /reset` runs
+`seed.sql` with `psql -v ON_ERROR_STOP=1` and refuses any `DATABASE_URL` that is not a compose service
+(host without dots) and a database ending in `_factory`, or that carries a query string. `seed.sql` is
+project-owned: empty the app tables (keep the migration table), insert the seed rows, and start with a
+check of `current_database()` as a second fence.
+
+Logins: a reset usually ends every session (users are re-created). Log in inside each test through a
+small project helper next to the specs (`tests/helpers.mjs`); the proof types it visibly, regression
+specs fill the form directly.
 
 ## Config reference (`factory/evidence.config.sh`)
 

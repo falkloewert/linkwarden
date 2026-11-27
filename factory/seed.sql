@@ -1,5 +1,5 @@
--- Factory sandbox seed: empties every app table and creates one user. Run by the mock's
--- POST /_mock/reset before each browser test; never point it at a real database.
+-- Factory sandbox seed: empties every app table and creates one user. Run by the kit's seed-reset
+-- service (POST /reset) before each browser test; never point it at a real database.
 DO $$
 DECLARE
   t text;
