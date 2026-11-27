@@ -9,7 +9,7 @@ quality gate (`quality-gate.json`). Exit 0 only if everything passes. CI workflo
 ```bash
 # from a glass-factory checkout; <repo> = root of the target git repository
 kit/evidence/install.sh <repo> [--dir factory]            # first install
-kit/evidence/install.sh <repo> [--dir factory] --update   # kit update, or after changing SCOPE_*_RE
+kit/evidence/install.sh <repo> [--dir factory] --update   # kit update, or after changing BASE_BRANCHES / SCOPE_*_RE
 ```
 
 It refuses to run if the managed paths have uncommitted changes, and prints what it changed.
@@ -37,7 +37,9 @@ Specs live in `factory/evidence/tests/`: `*regression.spec.mjs` (fast, video onl
 `proof-flow.spec.mjs` (the proof video). Every spec imports `test`, `expect`, `APP_URL`, `MOCK_URL`,
 `INSPECTOR_URL` from `../scripts/sandbox.mjs` and the step helpers from `../scripts/proof-helpers.mjs`.
 The auto fixture resets the project state before each test, routes fixtures, and fails the test if a request
-leaves the sandbox. The quality gate (`specs_use_sandbox_fixture`) fails if any spec imports `@playwright/test` (or `playwright`) directly. Quality gate and report formats: see the skill `level1-evidence`.
+leaves the sandbox. The quality gate (`specs_use_sandbox_fixture`) fails if any spec imports `@playwright/test` (or `playwright`) directly.
+Unit test runners of the project collect `*.spec.mjs` by default: exclude the factory folder from them (vitest
+`test.exclude`, jest `testPathIgnorePatterns`, CI scripts that list test files); `install.sh` points out the configs it finds. Quality gate and report formats: see the skill `level1-evidence`.
 
 ## Config reference (`factory/evidence.config.sh`)
 
@@ -47,6 +49,7 @@ Plain `KEY=value`, sourced by bash. Required: `PROJECT_PREFIX`, `APP_URL`, `MOCK
 |---|---|---|
 | `PROJECT_PREFIX` | required | Prefix of compose project names (`<prefix>-evidence-<pid>-<rand>`) and of accepted inherited names |
 | `COMPOSE_FILE` | `docker-compose.factory.yml` | Sandbox compose file, relative to the repo root |
+| `BASE_BRANCHES` | `main` | Branches PRs go into (space-separated, e.g. `main dev`): the workflow runs for PRs into them (rendered by `install.sh`); the first is the local diff base (`BASE_REF` overrides it) |
 | `APP_URL`, `MOCK_URL` | required | As the browser inside the sandbox network sees them (`http://web:8080`); service and port are also used to find the host ports |
 | `INSPECTOR_URL` | `MOCK_URL` | Page of the mock listing what the app sent |
 | `APP_PORT_VAR`, `MOCK_PORT_VAR` | empty | Compose variables for the host ports; the runner sets them to `0` (ephemeral) |
@@ -57,6 +60,7 @@ Plain `KEY=value`, sourced by bash. Required: `PROJECT_PREFIX`, `APP_URL`, `MOCK
 | `UNIT_RUNNER` | `node` | `node` (throwaway container, repo read-only, no network), `service` (`compose exec`), `none` |
 | `UNIT_SERVICE`, `UNIT_NODE_IMAGE`, `UNIT_CMD` | | Service for `service`; image for `node` (default: first `node:` image of the compose file); `sh` snippet printing TAP lines |
 | `UNIT_LABEL` | `Unit Tests` | Wording in the report |
+| `KNOWN_SKIPS` | empty | Unit cases the project skips on purpose, exact names as `UNIT_CMD` prints them (without `# SKIP`), one per line. They are listed in the report as known skips; any other skip still fails the gate. An entry that no longer shows up is reported in the run log |
 | `SMOKE_CMD` | empty | Host command from the repo root, counts as one TAP case; ports in `EVIDENCE_APP_PORT`, `EVIDENCE_MOCK_PORT` and the `*_PORT_VAR` names |
 | `ENVIRONMENT_DESC` | empty | Report line "Isolated ... Sandbox (`<this>`, 0 prod secrets)" |
 | `SCOPE_VERIFICATION_RE`, `SCOPE_SENSITIVE_RE`, `SCOPE_SENSITIVE_LABEL` | generic | Which changed files must be disclosed in the report; rendered into the workflow by `install.sh` |

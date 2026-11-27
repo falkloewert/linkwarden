@@ -1,4 +1,4 @@
-// managed by glass-factory kit v1.2.0 (8b5ada6), do not edit; change factory/evidence.config.sh or factory/evidence/tests/
+// managed by glass-factory kit v1.3.0 (a5ab14a), do not edit; change factory/evidence.config.sh or factory/evidence/tests/
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
@@ -231,22 +231,26 @@ async function readUnitResults() {
   let skipped = 0;
   let cancelled = 0;
   let todo = 0;
+  let knownSkips = 0;
   let durationMs = 0;
 
   for (const line of tapRaw.split(/\r?\n/)) {
     const caseMatch = line.match(/^(ok|not ok)\s+\d+\s+-\s+(.+)$/);
     if (caseMatch) {
       const rawTitle = caseMatch[2].trim();
-      const isSkip = /#\s*SKIP\b/i.test(rawTitle);
+      // KNOWN-SKIP: a skip listed in KNOWN_SKIPS (run-evidence.sh), shown in the report, not a failure
+      const isKnownSkip = /#\s*KNOWN-SKIP\b/.test(rawTitle);
+      const isSkip = !isKnownSkip && /#\s*SKIP\b/i.test(rawTitle);
       const isTodo = /#\s*TODO\b/i.test(rawTitle);
       cases.push({
         ok: caseMatch[1] === 'ok' && !isSkip && !isTodo,
-        status: isSkip ? 'SKIP' : isTodo ? 'TODO' : caseMatch[1] === 'ok' ? 'PASS' : 'FAIL',
-        title: rawTitle,
+        status: isKnownSkip ? 'KNOWN-SKIP' : isSkip ? 'SKIP' : isTodo ? 'TODO' : caseMatch[1] === 'ok' ? 'PASS' : 'FAIL',
+        title: isKnownSkip ? rawTitle.replace(/\s*#\s*KNOWN-SKIP\b.*$/, '') : rawTitle,
+        addedByChange: isKnownSkip && /KNOWN_SKIPS entry added by this change/.test(rawTitle),
       });
       continue;
     }
-    const statMatch = line.match(/^#\s+(tests|pass|fail|skipped|cancelled|todo|duration_ms)\s+([\d.]+)$/);
+    const statMatch = line.match(/^#\s+(tests|pass|fail|skipped|known_skips|cancelled|todo|duration_ms)\s+([\d.]+)$/);
     if (statMatch) {
       const key = statMatch[1];
       const val = Number(statMatch[2]);
@@ -254,6 +258,7 @@ async function readUnitResults() {
       if (key === 'pass') passed = val;
       if (key === 'fail') failed = val;
       if (key === 'skipped') skipped = val;
+      if (key === 'known_skips') knownSkips = val;
       if (key === 'cancelled') cancelled = val;
       if (key === 'todo') todo = val;
       if (key === 'duration_ms') durationMs = val;
@@ -264,6 +269,7 @@ async function readUnitResults() {
     total = cases.length;
     passed = cases.filter((c) => c.status === 'PASS').length;
     skipped = cases.filter((c) => c.status === 'SKIP').length;
+    knownSkips = cases.filter((c) => c.status === 'KNOWN-SKIP').length;
     todo = cases.filter((c) => c.status === 'TODO').length;
     failed = cases.filter((c) => c.status === 'FAIL').length;
   }
@@ -279,7 +285,7 @@ async function readUnitResults() {
     cancelled === 0 &&
     todo === 0;
 
-  return { exitCode: effectiveExitCode, total, passed, failed, skipped, cancelled, todo, durationMs, cases, ok };
+  return { exitCode: effectiveExitCode, total, passed, failed, skipped, knownSkips, cancelled, todo, durationMs, cases, ok };
 }
 
 async function readChangedFiles() {
@@ -432,8 +438,10 @@ async function main() {
     unit && (unit.skipped > 0 || unit.cancelled > 0 || unit.todo > 0)
       ? `, ${unit.skipped} skipped, ${unit.cancelled} cancelled, ${unit.todo} todo`
       : '';
+  // Known skips are listed below the summary line and do not count as run cases
+  const unitKnownNote = unit?.knownSkips > 0 ? `, ${unit.knownSkips} known skip${unit.knownSkips === 1 ? '' : 's'} listed below` : '';
   const unitSummaryLine = unit
-    ? `**${unit.ok ? 'PASS' : 'FAIL'}** – **${unit.passed}/${unit.total} passed** (${unit.failed} failed${unitSkippedNote}, exit ${unit.exitCode}) in **${(unit.durationMs / 1000).toFixed(2)}s**`
+    ? `**${unit.ok ? 'PASS' : 'FAIL'}** – **${unit.passed}/${unit.total - unit.knownSkips} passed** (${unit.failed} failed${unitSkippedNote}${unitKnownNote}, exit ${unit.exitCode}) in **${(unit.durationMs / 1000).toFixed(2)}s**`
     : UNIT_DISABLED
       ? '*(disabled in evidence.config.sh: UNIT_RUNNER=none and no SMOKE_CMD)*'
       : '*(not captured in standalone evidence run)*';
@@ -567,9 +575,16 @@ async function main() {
     '</details>',
   ].join('\n');
 
+  const knownSkipCases = unit ? unit.cases.filter((c) => c.status === 'KNOWN-SKIP') : [];
+  const knownSkipLines = knownSkipCases.length
+    ? `\n  - Known skips (the project skips these on purpose; \`KNOWN_SKIPS\` in evidence.config.sh):\n${knownSkipCases
+        .map((c) => `    - \`${c.title.replace(/`/g, "'")}\`${c.addedByChange ? ' **(entry added by this change: confirm the skip is not new)**' : ''}`)
+        .join('\n')}`
+    : '';
+
   const markdown = `# Level 1 Evidence Report – ${verdict}
 
-- **${UNIT_LABEL}:** ${unitSummaryLine}
+- **${UNIT_LABEL}:** ${unitSummaryLine}${knownSkipLines}
 - **E2E Tests (Playwright):** ${e2eSummaryLine}
 - **Environment:** Isolated Local Docker Compose Sandbox (${ENVIRONMENT_DESC ? `${ENVIRONMENT_DESC}, ` : ''}**0 prod secrets**)
 - **Generated:** ${new Date().toISOString()}

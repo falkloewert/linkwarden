@@ -1,4 +1,4 @@
-# managed by glass-factory kit v1.2.0 (8b5ada6), rendered by install.sh from factory/evidence.config.sh: do not edit; change the config and run install.sh --update
+# managed by glass-factory kit v1.3.0 (a5ab14a), rendered by install.sh from factory/evidence.config.sh: do not edit; change the config and run install.sh --update
 # Level 1 Evidence PR Workflow (rendered from the glass-factory kit template by install.sh)
 #
 # Runs factory/evidence/run-evidence.sh and publishes the proof on the pull request.
@@ -33,9 +33,8 @@ name: Level 1 Evidence Check
 
 on:
   pull_request:
-    # ponytail: "dev" added by hand (linkwarden takes PRs on dev); the kit template hard-codes main and
-    # install.sh --update reverts this. Remove once the kit renders the base branches (falkloewert/glass-factory#13).
-    branches: [main, dev]
+    # BASE_BRANCHES in the project config
+    branches: ["dev"]
 
 permissions: {}
 
@@ -76,7 +75,7 @@ jobs:
 
       - name: Run Level 0 + Level 1 Sandbox, Evidence Suite & Quality Gate
         run: |
-          CHANGED_FILES="$(cat /tmp/pr-changed-files.txt)" ./factory/evidence/run-evidence.sh
+          BASE_REF="${{ github.event.pull_request.base.sha }}" CHANGED_FILES="$(cat /tmp/pr-changed-files.txt)" ./factory/evidence/run-evidence.sh
 
       - name: Upload Evidence Bundle (H.264 MP4, Smooth GIF, Full-Res Screenshots, Report)
         if: always()

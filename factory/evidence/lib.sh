@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# managed by glass-factory kit v1.2.0 (8b5ada6), do not edit; change factory/evidence.config.sh or factory/evidence/tests/
+# managed by glass-factory kit v1.3.0 (a5ab14a), do not edit; change factory/evidence.config.sh or factory/evidence/tests/
 # Shared by run-evidence.sh and install.sh (and the kit self-test): loads factory/evidence.config.sh
 # on top of the kit defaults. Source it, do not execute it.
 
@@ -11,6 +11,7 @@ evidence_load_config() {
   [[ -f "$config" ]] || { echo "[evidence] Error: $config not found (install.sh writes a template)" >&2; return 1; }
 
   COMPOSE_FILE="docker-compose.factory.yml"   # relative to the repository root
+  BASE_BRANCHES="main"                        # branches PRs go into, space-separated; the first is the local diff base
   PROJECT_PREFIX=""                           # required
   APP_URL=""                                  # required, as the browser in the sandbox network sees it
   MOCK_URL=""                                 # required
@@ -25,6 +26,7 @@ evidence_load_config() {
   UNIT_NODE_IMAGE=""                          # default: first node: image of the compose file
   UNIT_CMD=""                                 # sh snippet that prints TAP lines ("ok N - name" / "not ok N - name")
   UNIT_LABEL="Unit Tests"
+  KNOWN_SKIPS=""                              # unit cases the project skips on purpose: exact names, one per line
   SMOKE_CMD=""                                # optional, runs on the host from the repository root
   ENVIRONMENT_DESC=""                         # shown in the report: "Isolated ... Sandbox (<this>, 0 prod secrets)"
   SCOPE_VERIFICATION_RE='(^|[\/._-])(tests?|__tests__|specs?|mocks?|evidence)([\/._-]|$)|docker-compose|run-evidence\.sh'
@@ -47,6 +49,12 @@ evidence_load_config() {
   done
   [[ "$PROJECT_PREFIX" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || {
     echo "[evidence] Error: PROJECT_PREFIX '$PROJECT_PREFIX' must be lowercase letters, digits, - or _" >&2; return 1; }
+  [[ "$BASE_BRANCHES" =~ ^[A-Za-z0-9._/-]+([[:space:]]+[A-Za-z0-9._/-]+)*$ ]] || {
+    echo "[evidence] Error: BASE_BRANCHES '$BASE_BRANCHES' must be branch names (letters, digits, . _ / -) separated by spaces" >&2; return 1; }
+  for key in $BASE_BRANCHES; do
+    git check-ref-format --branch "$key" >/dev/null 2>&1 || {
+      echo "[evidence] Error: BASE_BRANCHES entry '$key' is not a valid branch name" >&2; return 1; }
+  done
   for key in SCOPE_VERIFICATION_RE SCOPE_SENSITIVE_RE; do
     [[ "${!key}" != *$'\n'* ]] || { echo "[evidence] Error: $key must be a single line" >&2; return 1; }
   done
@@ -65,6 +73,13 @@ evidence_load_config() {
   esac
   [[ -n "$INSPECTOR_URL" ]] || INSPECTOR_URL="$MOCK_URL"
   [[ -n "$PW_PROOF_TIMEOUT_MS" ]] || PW_PROOF_TIMEOUT_MS="$PW_TIMEOUT_MS"
+}
+
+# evidence_yaml_branches: BASE_BRANCHES as a YAML flow list (["main", "dev"]) for the workflow trigger.
+evidence_yaml_branches() {
+  local b out=""
+  for b in $BASE_BRANCHES; do out+="${out:+, }\"$b\""; done
+  printf '[%s]' "$out"
 }
 
 # evidence_json_str <value>: JSON/JS string literal (used to render the scope patterns into the workflow).
