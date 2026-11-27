@@ -61,10 +61,16 @@ endpoint gets the kit's seed-reset service instead of a change to its code:
 ```
 
 `RESET_REQUESTS="POST http://seed-reset:8090/reset; POST $MOCK_URL/_mock/reset"`. `POST /reset` runs
-`seed.sql` with `psql -v ON_ERROR_STOP=1` and refuses any `DATABASE_URL` that is not a compose service
-(host without dots) and a database ending in `_factory`, or that carries a query string. `seed.sql` is
-project-owned: empty the app tables (keep the migration table), insert the seed rows, and start with a
-check of `current_database()` as a second fence.
+`seed.sql` in one transaction. It refuses, on every request:
+- a `DATABASE_URL` that is not plain `postgresql://user[:password]@service[:port]/<name>_factory` (one `@`,
+  a lowercase service name without dots, not `localhost`, no query string, no percent-encoding, no second host),
+- a host that does not resolve to an address on the service's own networks (the sandbox),
+- a seed that starts with a psql backslash command. The seed goes to the server as SQL (`psql -c`), so
+  `\connect` and other meta-commands never run; psql gets no URL, no inherited `PG*` environment and no `.psqlrc`.
+
+`seed.sql` is project-owned and plain SQL (up to about 120 KB, the size of one command argument): empty the
+app tables (keep the migration table), insert the seed rows, and start with a check of `current_database()`
+as a second fence. MySQL and other databases are not supported yet.
 
 Logins: a reset usually ends every session (users are re-created). Log in inside each test through a
 small project helper next to the specs (`tests/helpers.mjs`); the proof types it visibly, regression

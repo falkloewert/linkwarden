@@ -1,4 +1,4 @@
-# managed by glass-factory kit v1.4.0 (38d025b), do not edit; change factory/evidence.config.sh or factory/evidence/tests/
+# managed by glass-factory kit v1.4.0 (52566f1), do not edit; change factory/evidence.config.sh or factory/evidence/tests/
 FROM mcr.microsoft.com/playwright:v1.65.1-noble
 
 RUN apt-get update \

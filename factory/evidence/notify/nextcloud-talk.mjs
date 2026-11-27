@@ -1,4 +1,4 @@
-// managed by glass-factory kit v1.4.0 (38d025b), do not edit; change factory/evidence.config.sh or factory/evidence/tests/
+// managed by glass-factory kit v1.4.0 (52566f1), do not edit; change factory/evidence.config.sh or factory/evidence/tests/
 // Notify a reviewer in Nextcloud Talk: upload the proof video into the bot
 // account's files and share it into a Talk room with a caption, so the video
 // plays in the Talk app (also for private repos). Without a video, the caption

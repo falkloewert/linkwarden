@@ -1,4 +1,4 @@
-// managed by glass-factory kit v1.4.0 (38d025b), do not edit; change factory/evidence.config.sh or factory/evidence/tests/
+// managed by glass-factory kit v1.4.0 (52566f1), do not edit; change factory/evidence.config.sh or factory/evidence/tests/
 import fs from 'node:fs';
 import { test as base, expect } from '@playwright/test';
 
