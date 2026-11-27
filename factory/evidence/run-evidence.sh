@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# managed by glass-factory kit v1.2.0 (8b5ada6), do not edit; change factory/evidence.config.sh or factory/evidence/tests/
+# managed by glass-factory kit v1.3.0 (a5ab14a), do not edit; change factory/evidence.config.sh or factory/evidence/tests/
 set -euo pipefail
 
 # Level 0 + Level 1 evidence run for a project's factory sandbox, inside isolated Docker containers:
@@ -160,6 +160,9 @@ trap cleanup EXIT
 # The CI workflow carries a rendered copy of the scope patterns (its publish job never checks out PR code).
 WORKFLOW_FILE="$REPO_ROOT/.github/workflows/level1-evidence.yml"
 if [[ -f "$WORKFLOW_FILE" ]]; then
+  if ! grep -qF -- "branches: $(evidence_yaml_branches)" "$WORKFLOW_FILE"; then
+    echo "[evidence] BASE_BRANCHES in evidence.config.sh differs from .github/workflows/level1-evidence.yml; run install.sh <repo> --update" >&2
+  fi
   for key in SCOPE_VERIFICATION_RE SCOPE_SENSITIVE_RE; do
     if ! grep -qF -- "$(evidence_json_str "${!key}")" "$WORKFLOW_FILE"; then
       echo "[evidence] $key in evidence.config.sh differs from .github/workflows/level1-evidence.yml; run install.sh <repo> --update" >&2
@@ -186,18 +189,36 @@ touch "$ARTIFACTS_DIR/.evidence-artifacts"
 
 # Collect changed files for deterministic Scope & Verification Integrity checks.
 # Includes BOTH committed feature-branch diffs (relative to base ref) AND uncommitted/untracked files.
-if [[ -n "${CHANGED_FILES+x}" ]]; then
-  printf '%s\n' "$CHANGED_FILES" | sed '/^$/d' | sort -u > "$ARTIFACTS_DIR/changed-files.txt"
-elif git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+RESOLVED_BASE=""
+IN_GIT=false
+if git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  IN_GIT=true
   RESOLVED_BASE="${BASE_REF:-}"
   if [[ -z "$RESOLVED_BASE" ]]; then
-    for candidate in origin/main main origin/master master; do
+    candidates=()
+    for b in $BASE_BRANCHES; do candidates+=("origin/$b" "$b"); done
+    for candidate in "${candidates[@]}" origin/master master; do
       if git -C "$REPO_ROOT" rev-parse --verify --quiet "$candidate" >/dev/null 2>&1; then
         RESOLVED_BASE="$candidate"
         break
       fi
     done
   fi
+fi
+
+# KNOWN_SKIPS of the base branch: entries this change adds are marked in the report for the reviewer.
+BASE_KNOWN_SKIPS=""
+if [[ -n "$KNOWN_SKIPS" && -n "$RESOLVED_BASE" ]]; then
+  BASE_CONFIG_DIR="$(mktemp -d)"
+  if git -C "$REPO_ROOT" show "$RESOLVED_BASE:$(basename "$FACTORY_DIR")/evidence.config.sh" > "$BASE_CONFIG_DIR/evidence.config.sh" 2>/dev/null; then
+    BASE_KNOWN_SKIPS="$( (evidence_load_config "$BASE_CONFIG_DIR" >/dev/null 2>&1 && printf '%s' "$KNOWN_SKIPS") || true)"
+  fi
+  rm -rf "$BASE_CONFIG_DIR"
+fi
+
+if [[ -n "${CHANGED_FILES+x}" ]]; then
+  printf '%s\n' "$CHANGED_FILES" | sed '/^$/d' | sort -u > "$ARTIFACTS_DIR/changed-files.txt"
+elif [[ "$IN_GIT" == "true" ]]; then
   {
     if [[ -n "$RESOLVED_BASE" ]]; then
       git -C "$REPO_ROOT" diff --no-renames --name-only "${RESOLVED_BASE}...HEAD" 2>/dev/null || true
@@ -223,13 +244,40 @@ T_START_MS="$(date +%s%3N)"
 TAP_BODY=""
 T_TOTAL=0 T_PASS=0 T_FAIL=0 T_SKIP=0 T_TODO=0
 
-tap_case() { # <ok|not ok> <title, may carry "# SKIP" / "# TODO">
+# KNOWN_SKIPS: exact names of unit cases the project skips on purpose (one per line in the config).
+# Such a skip ("ok ... # SKIP", each entry at most once) is written as "# KNOWN-SKIP" and listed in the
+# report; any other skip, a "not ok ... # SKIP" and a second case with the same name still fail the gate.
+T_KNOWN=0
+KNOWN_SEEN=""
+trim() { local v="$1"; v="${v#"${v%%[![:space:]]*}"}"; printf '%s' "${v%"${v##*[![:space:]]}"}"; }
+in_list() { # <name> <newline-separated list>
+  local entry
+  while IFS= read -r entry; do
+    entry="$(trim "$entry")"
+    [[ -n "$entry" && "$entry" == "$1" ]] && return 0
+  done <<< "$2"
+  return 1
+}
+
+tap_case() { # <ok|not ok> <title, may carry "# SKIP" / "# TODO"> [plain: no KNOWN_SKIPS match]
+  # Only this function writes the KNOWN-SKIP marker; a test name cannot carry it in.
+  local title="${2//KNOWN-SKIP/KNOWN SKIP}" name lower
+  lower="${title,,}"
   T_TOTAL=$((T_TOTAL + 1))
-  if [[ "$2" =~ \#[[:space:]]*SKIP ]]; then T_SKIP=$((T_SKIP + 1))
-  elif [[ "$2" =~ \#[[:space:]]*TODO ]]; then T_TODO=$((T_TODO + 1))
+  if [[ "$1" == "ok" && "${3:-}" != "plain" && "$lower" =~ ^(.*[^[:space:]])[[:space:]]+\#[[:space:]]*skip([[:space:]].*)?$ ]] \
+     && name="${title:0:${#BASH_REMATCH[1]}}" && in_list "$name" "$KNOWN_SKIPS" && ! in_list "$name" "$KNOWN_SEEN"; then
+    T_KNOWN=$((T_KNOWN + 1))
+    KNOWN_SEEN+="$name"$'\n'
+    if in_list "$name" "$BASE_KNOWN_SKIPS"; then
+      title="$name # KNOWN-SKIP (KNOWN_SKIPS in evidence.config.sh)"
+    else
+      title="$name # KNOWN-SKIP (KNOWN_SKIPS entry added by this change)"
+    fi
+  elif [[ "$lower" =~ \#[[:space:]]*skip ]]; then T_SKIP=$((T_SKIP + 1))
+  elif [[ "$lower" =~ \#[[:space:]]*todo ]]; then T_TODO=$((T_TODO + 1))
   elif [[ "$1" == "ok" ]]; then T_PASS=$((T_PASS + 1))
   else T_FAIL=$((T_FAIL + 1)); fi
-  TAP_BODY+="$1 $T_TOTAL - $2"$'\n'
+  TAP_BODY+="$1 $T_TOTAL - $title"$'\n'
 }
 
 case "$UNIT_RUNNER" in
@@ -254,17 +302,23 @@ case "$UNIT_RUNNER" in
     UNIT_CASES=0
     UNIT_CASE_FAILS=0
     while IFS= read -r line; do
-      if [[ "$line" =~ ^(ok|not\ ok)(\ [0-9]+)?\ -\ (.+)$ ]]; then
+      # Top-level cases, and nested ones (indented, e.g. inside describe) only when they carry a
+      # SKIP/TODO directive: their parent reports pass/fail, but a nested skip must not go unseen.
+      if [[ "$line" =~ ^([[:space:]]*)(ok|not\ ok)(\ [0-9]+)?\ -\ (.+)$ ]]; then
         # Copy first: tap_case runs its own [[ =~ ]] and overwrites BASH_REMATCH.
-        result="${BASH_REMATCH[1]}"
-        name="${BASH_REMATCH[3]}"
+        indent="${BASH_REMATCH[1]}"
+        result="${BASH_REMATCH[2]}"
+        name="${BASH_REMATCH[4]}"
+        lower_name="${name,,}"
+        if [[ -n "$indent" ]] && ! [[ "$lower_name" =~ \#[[:space:]]*(skip|todo) ]]; then continue; fi
+        fails_before=$T_FAIL
         tap_case "$result" "$name"
         UNIT_CASES=$((UNIT_CASES + 1))
-        [[ "$result" == "ok" ]] || UNIT_CASE_FAILS=$((UNIT_CASE_FAILS + 1))
+        [[ "$T_FAIL" -eq "$fails_before" ]] || UNIT_CASE_FAILS=$((UNIT_CASE_FAILS + 1))
       fi
     done <<< "$UNIT_OUT"
     if [[ "$UNIT_CASES" -eq 0 || ( "$UNIT_CMD_EXIT" -ne 0 && "$UNIT_CASE_FAILS" -eq 0 ) ]]; then
-      tap_case "not ok" "unit command exited $UNIT_CMD_EXIT without a usable TAP result"
+      tap_case "not ok" "unit command exited $UNIT_CMD_EXIT without a usable TAP result" plain
     fi
     ;;
   *)
@@ -284,9 +338,9 @@ if [[ -n "$SMOKE_CMD" ]]; then
   SMOKE_EXIT="${PIPESTATUS[0]}"
   set -e
   if [[ "$SMOKE_EXIT" -eq 0 ]]; then
-    tap_case ok "smoke: $SMOKE_CMD"
+    tap_case ok "smoke: ${SMOKE_CMD//#/\\#}" plain
   else
-    tap_case "not ok" "smoke: $SMOKE_CMD (exit $SMOKE_EXIT, see smoke.log)"
+    tap_case "not ok" "smoke: ${SMOKE_CMD//#/\\#} (exit $SMOKE_EXIT, see smoke.log)" plain
   fi
 fi
 
@@ -302,13 +356,20 @@ if [[ "$T_TOTAL" -gt 0 ]]; then
     echo "# fail $T_FAIL"
     echo "# cancelled 0"
     echo "# skipped $T_SKIP"
+    echo "# known_skips $T_KNOWN"
     echo "# todo $T_TODO"
     echo "# duration_ms $T_DURATION_MS"
   } > "$ARTIFACTS_DIR/unit-tests.tap"
   [[ "$T_FAIL" -eq 0 ]] || UNIT_EXIT=1
   printf '{"exitCode":%d}\n' "$UNIT_EXIT" > "$ARTIFACTS_DIR/unit-status.json"
 fi
-echo "[evidence] Checks: $T_PASS/$T_TOTAL passed, $T_FAIL failed, $T_SKIP skipped"
+echo "[evidence] Checks: $T_PASS/$((T_TOTAL - T_KNOWN)) passed, $T_FAIL failed, $T_SKIP skipped, $T_KNOWN known skips"
+# A KNOWN_SKIPS entry that no longer shows up is probably renamed or fixed upstream: say so, do not fail.
+while IFS= read -r known; do
+  known="$(trim "$known")"
+  [[ -z "$known" ]] && continue
+  in_list "$known" "$KNOWN_SEEN" || echo "[evidence] Note: KNOWN_SKIPS entry not skipped in this run: $known"
+done <<< "$KNOWN_SKIPS"
 
 echo "[evidence] Running Level 1 Playwright evidence suite + deterministic quality gate..."
 evidence_container_env_args

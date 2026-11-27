@@ -1,4 +1,4 @@
-// managed by glass-factory kit v1.2.0 (8b5ada6), do not edit; change factory/evidence.config.sh or factory/evidence/tests/
+// managed by glass-factory kit v1.3.0 (a5ab14a), do not edit; change factory/evidence.config.sh or factory/evidence/tests/
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
@@ -127,6 +127,7 @@ function collectPlaywrightAudit(suites = [], acc = { total: 0, passed: 0, skippe
 
 async function auditRawTestOutputs(outDir, { requireResults, failOnFailures }) {
   const issues = [];
+  const notes = [];
 
   const resultsPath = path.join(outDir, 'results.json');
   if (await statSafe(resultsPath)) {
@@ -160,7 +161,13 @@ async function auditRawTestOutputs(outDir, { requireResults, failOnFailures }) {
     let skipCount = 0;
     let cancelCount = 0;
     let todoCount = 0;
+    let knownCount = 0;
+    let knownAdded = 0;
     for (const line of tapRaw.split(/\r?\n/)) {
+      if (/^ok\s+\d+\s+-\s+.*#\s*KNOWN-SKIP\b/.test(line)) {
+        knownCount += 1;
+        if (/KNOWN_SKIPS entry added by this change/.test(line)) knownAdded += 1;
+      }
       const m = line.match(/^#\s+(pass|fail|skipped|cancelled|todo)\s+(\d+)$/);
       if (!m) continue;
       const val = Number(m[2]);
@@ -170,7 +177,13 @@ async function auditRawTestOutputs(outDir, { requireResults, failOnFailures }) {
       if (m[1] === 'cancelled') cancelCount = val;
       if (m[1] === 'todo') todoCount = val;
     }
-    if (skipCount > 0) issues.push(`Unit tests skipped ${skipCount} case(s)`);
+    if (skipCount > 0) issues.push(`Unit tests skipped ${skipCount} case(s) not listed in KNOWN_SKIPS`);
+    if (knownCount > 0) {
+      notes.push(
+        `${knownCount} known unit skip(s) from KNOWN_SKIPS, listed in EVIDENCE.md` +
+          (knownAdded > 0 ? `, ${knownAdded} of them added by this change` : '')
+      );
+    }
     if (cancelCount > 0) issues.push(`Unit tests cancelled ${cancelCount} case(s)`);
     if (todoCount > 0) issues.push(`Unit tests had ${todoCount} todo case(s)`);
     if (failOnFailures) {
@@ -179,7 +192,7 @@ async function auditRawTestOutputs(outDir, { requireResults, failOnFailures }) {
     }
   }
 
-  return issues;
+  return { issues, notes };
 }
 
 // Specs must import `test` from ../scripts/sandbox.mjs: a spec that imports Playwright directly runs
@@ -291,16 +304,16 @@ async function main() {
   );
 
   // 3. Anti-fake-green check: ALWAYS disallow skipped/cancelled/todo tests
-  const testIssues = await auditRawTestOutputs(outDir, {
+  const { issues: testIssues, notes: testNotes } = await auditRawTestOutputs(outDir, {
     requireResults: enforceFullMediaGate,
     failOnFailures: enforceFullMediaGate,
   });
   addCheck(
     'no_skipped_or_error_tests',
     testIssues.length === 0,
-    testIssues.length === 0
+    (testIssues.length === 0
       ? 'All unit and Playwright E2E checks executed cleanly with 0 skipped/cancelled/error cases'
-      : testIssues.join('; ')
+      : testIssues.join('; ')) + (testNotes.length ? ` (${testNotes.join('; ')})` : '')
   );
 
   if (enforceFullMediaGate) {
